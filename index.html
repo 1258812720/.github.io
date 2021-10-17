@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>音频可视化</title>
+	</head>
+	<style type="text/css">
+		#can {
+			border: 1px solid;
+			margin: auto;
+		}
+	</style>
+	<body>
+		<div id="app">
+			<button id="play">暂停</button>
+			<button>其他</button>
+			<canvas id="can" width="800" height="400"></canvas>
+			<p id="res"></p>
+		</div>
+	</body>
+	<script type="text/javascript">
+		(function() {
+			function $(el) {
+				return document.querySelector(el);
+			};
+			var audioCtx = null,
+				audioSource = null,
+				analyserNode = null,
+				width = null,
+				height = null;
+
+			function initAudio() {
+				audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+				audioSource = audioCtx.createBufferSource();
+				analyserNode = audioCtx.createAnalyser();
+			}
+			let time = null,
+				rf = null,
+				render = null;
+
+			function dataDeal() {
+				let arr = new Uint8Array(analyserNode.frequencyBinCount);
+				rf = window.requestAnimationFrame ||
+					window.webkitrequestAnimationFrame ||
+					window.mozrequestAnimationFrame; //兼容
+				render = function() {
+					analyserNode.getByteFrequencyData(arr);
+					time = rf(render);
+					canvas(arr);
+				}
+				rf(render)
+			}
+
+			// 播放暂停
+			let pause = e => {
+				if (audioCtx.state === "running") {
+					audioCtx.suspend().then(() => {
+						cancelAnimationFrame(time)
+						$("#play").innerText = "播放";
+					})
+				} else if (audioCtx.state === "suspended") {
+					audioCtx.resume().then(() => {
+						rf(render)
+						$("#play").innerText = "暂停";
+					});
+				}
+			}
+
+			$("#play").onclick = pause;
+			let play = e => {
+				audioSource.buffer = e;
+				analyserNode.fftSize = 256;
+				audioSource.connect(analyserNode);
+				analyserNode.connect(audioCtx.destination);
+				dataDeal();
+				audioSource.loop = false; // 循环播放，默认为false
+				audioSource.start(0);
+			}
+
+			function readFile(f) {
+
+				let file = f;
+				if (file !== undefined) {
+					initAudio();
+				}
+				let fr = new FileReader();
+				fr.onload = function(e) {
+					audioCtx.decodeAudioData(e.target.result, bf => {
+						play(bf);
+					}, err => {
+						throw new Error("audio file is error")
+					})
+				}
+				fr.readAsArrayBuffer(file)
+			}
+			// 设置线条的宽度
+			let c = document.getElementById("can"),
+				ctx = c.getContext("2d");
+			width = parseInt(window.getComputedStyle(c).width);
+			height = parseInt(window.getComputedStyle(c).height);
+
+
+			let xf = ctx.createLinearGradient(0, 0, 200, 200);
+			xf.addColorStop(0, "red");
+			xf.addColorStop(0.5, "blue");
+			xf.addColorStop(1, "green");
+			ctx.lineWidth = 5;
+			ctx.strokeStyle = xf;
+			document.ondragover = function(e) {
+				e.preventDefault();
+			};
+			document.ondrop = function(e) {
+				e.preventDefault();
+			};
+			c.addEventListener("dragenter", e => {
+				e.dataTransfer.dropEffect = 'copy';
+				c.addEventListener("drop", function(c) {
+					let file = c.dataTransfer.files[0];
+					$("#res").innerText = file.name + "Size:" + (file.size / 1024 / 1024).toFixed(2) +
+						"MB";
+					readFile(file);
+				})
+			})
+
+			function canvas(arr) {
+				ctx.clearRect(0, 0, width, height);
+				for (let i = 0; i < arr.length; i++) {
+					ctx.beginPath();
+					
+					ctx.moveTo(i * 8, height);
+					ctx.lineTo(i * 8, height - arr[i]);
+					ctx.shadowColor = "black";
+					ctx.shadowBlur = 2;
+					ctx.stroke();
+					ctx.fill();
+					// 画圆
+					ctx.beginPath();
+					ctx.arc(i * 8, height - arr[i], 2, 0, Math.PI * 2, false);
+					ctx.fillStyle = "aqua"
+					ctx.fill();
+				}
+			}
+		})()
+	</script>
+</html>
